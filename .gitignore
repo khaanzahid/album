@@ -1,0 +1,10 @@
+node_modules/
+.env
+photos.db
+*.log
+.DS_Store
+.vscode/
+.trae/
+test-supabase.js
+create-tables.js
+supabase_setup.sql

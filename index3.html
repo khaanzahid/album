@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Polaroid Wall</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Permanent+Marker&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/x-icon" href="favicon.jpg">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script
+      async
+      crossorigin="anonymous"
+      data-clerk-publishable-key="pk_test_c3VtbWFyeS1kZWVyLTE4LmNsZXJrLmFjY291bnRzLmRldiQ"
+      src="https://summary-deer-18.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
+      type="text/javascript"
+    ></script>
+</head>
+
+<body data-theme="light">
+    <!-- Loader Overlay -->
+    <div id="loaderOverlay" class="loader-overlay">
+        <div class="loader"></div>
+        <p id="loaderText">Loading...</p>
+    </div>
+
+    <!-- Clerk UI Components -->
+    <div id="app-auth-container" class="auth-overlay">
+        <div id="clerk-sign-in"></div>
+    </div>
+
+    <div class="space-background">
+        <div class="stars-container"></div>
+        <div class="floating-objects"></div>
+    </div>
+
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="header-top">
+                <h2>Memories</h2>
+                <button id="themeToggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+                    <i id="themeIcon" class="icon-moon"></i>
+                </button>
+                <button id="closeSidebar" onclick="closeSidebar()" title="Close">✕</button>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="nav-section">
+                <h3>Library</h3>
+                <button onclick="filterBy('all')" id="btn-all" class="active">
+                    <i class="icon-home"></i> <span>All Photos</span>
+                </button>
+                <button onclick="filterBy('favorites')" id="btn-favs">
+                    <i class="icon-heart"></i> <span>Favorites</span>
+                </button>
+                <button onclick="togglePrintMode()" id="btnPrintMode">
+                    <i class="icon-save"></i> <span>Print Polaroids</span>
+                </button>
+                <button onclick="toggleTrashBin()" id="trashBtn">
+                    <i class="icon-trash"></i> <span>Trash Bin</span>
+                </button>
+            </div>
+
+            <div class="nav-section">
+                <div class="section-header">
+                    <h3>Albums</h3>
+                    <button class="add-album-btn" onclick="addNewAlbum()" title="New Album">+</button>
+                </div>
+                <div id="albumsList" class="albums-list">
+                    <!-- Dynamic Albums here -->
+                </div>
+            </div>
+
+            <div class="nav-section theme-section">
+                <h3>Theme</h3>
+                <div class="global-theme-box">
+                    <div class="theme-picker-row">
+                        <label>Frame</label>
+                        <input type="color" id="globalPolaroidColor" value="#BDDDE4">
+                    </div>
+                    <div class="theme-picker-row">
+                        <label>Text</label>
+                        <input type="color" id="globalFontColor" value="#334155">
+                    </div>
+                    <button id="applyGlobalTheme" onclick="applyGlobalTheme()">
+                        Apply to All
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="upload-area">
+                <label for="upload" class="custom-upload-btn">
+                    <i class="icon-plus"></i> <span>Add Photos</span>
+                </label>
+                <input type="file" id="upload" accept="image/*" multiple hidden>
+            </div>
+            <button id="logoutBtn" class="logout-btn" title="Logout">
+                <i class="icon-logout"></i> <span>Logout</span>
+            </button>
+            <div class="sidebar-info">
+                <p>&copy; 2026 Polaroid Wall</p>
+                <div class="social-links">
+                    <a href="https://instagram.com/chief_zaahid" target="_blank" title="Instagram"><i class="icon-instagram"></i></a>
+                    <a href="https://www.linkedin.com/in/zahid-khan-51383b29a/" target="_blank" title="LinkedIn"><i class="icon-linkedin"></i></a>
+                    <a href="https://github.com/khaanzahid" target="_blank" title="GitHub"><i class="icon-github"></i></a>
+                </div>
+            </div>
+        </div>
+    </aside>
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <main class="content">
+        <header class="top-bar">
+            <button id="menuToggle" onclick="toggleSidebar()" title="Menu">☰</button>
+            <div class="top-bar-left">
+                <div class="search-box">
+                    <i class="icon-search"></i>
+                    <input type="text" id="searchInput" placeholder="Search your memories...">
+                </div>
+                <select id="sortWall" onchange="renderWall()" class="sort-select">
+                    <option value="newest" selected>Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="titleAZ">Title A-Z</option>
+                    <option value="titleZA">Title Z-A</option>
+                    <option value="favFirst">Favorites First</option>
+                </select>
+            </div>
+            
+            <div class="top-bar-right">
+                <div class="notification-center">
+                    <button id="notificationBtn" class="top-bar-btn" title="Notifications">
+                        <i class="icon-bell"></i>
+                        <span id="notificationBadge" class="notification-badge hidden"></span>
+                    </button>
+                    <div id="notificationDropdown" class="notification-dropdown hidden">
+                        <div class="dropdown-header">
+                            <h4>Notifications</h4>
+                            <button onclick="clearNotifications()" class="clear-btn">Clear all</button>
+                        </div>
+                        <div id="notificationList" class="notification-list">
+                            <p class="empty-notif">No new notifications</p>
+                        </div>
+                    </div>
+                </div>
+                <button id="profileBtn" class="top-bar-btn" title="Profile">
+                    <i class="icon-user"></i>
+                </button>
+            </div>
+
+            <div class="print-controls" id="printControls" style="display: none;">
+                <div class="print-batch-info">
+                    <span id="printBatchLabel">Batch 1.1</span>
+                    <span id="selectionCount">(0 / 1) Selected</span>
+                </div>
+                <select id="printTemplate" onchange="updateSelectionLimit()">
+                    <option value="1">1 Photo per page</option>
+                    <option value="2">2 Photos per page</option>
+                    <option value="4">4 Photos per page</option>
+                    <option value="9">9 Photos per page</option>
+                </select>
+                <button onclick="executePrint()" class="print-btn-final">Print Batch</button>
+            </div>
+            <div class="stats" id="photoStats">
+                Total Photos: 0
+            </div>
+        </header>
+
+        <div class="wall-container">
+            <h1 id="wallTitle">My Polaroid Wall</h1>
+            <div class="wall" id="mainWall">
+                <!-- Photos dynamically added here -->
+            </div>
+        </div>
+    </main>
+
+    <button id="scrollTopBtn" onclick="scrollToTop()">↑</button>
+
+    <!-- MODAL -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <img id="modalImg">
+            <input id="editTitle" placeholder="Edit title">
+            
+            <div class="modal-options">
+                <div class="color-picker-box">
+                    <label>Frame</label>
+                    <input type="color" id="polaroidColor" value="#BDDDE4">
+                </div>
+                <div class="color-picker-box">
+                    <label>Font</label>
+                    <input type="color" id="fontColor" value="#334155">
+                </div>
+            </div>
+
+            <textarea id="storyInput" rows="4" placeholder="Write the story..."></textarea>
+
+            <div class="modal-buttons">
+                <button id="saveStory">
+                    <i class="icon-save"></i> <span>Save</span>
+                </button>
+                <button id="downloadBtn" onclick="downloadImage()">
+                    <i class="icon-download"></i> <span>Download</span>
+                </button>
+                <button class="fav-btn" id="favBtn">
+                    <i class="icon-heart"></i> <span>Favorite</span>
+                </button>
+                <button class="close-btn" onclick="closeModal()">
+                    <span>Close</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+
+    <!-- NEW ALBUM MODAL -->
+    <div class="modal" id="albumModal">
+        <div class="modal-content">
+            <h3>Create New Album</h3>
+            <input type="text" id="newAlbumName" placeholder="Enter album name...">
+            <div class="modal-buttons">
+                <button id="confirmAlbumBtn">Create</button>
+                <button class="close-btn" onclick="closeAlbumModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
