@@ -26,25 +26,8 @@ let currentBatch = 1;
 let currentBatchSub = 1;
 
 let currentUser = null;
+let currentUserAlbumNames = []; // album names for current user only (for duplicate check)
 let notifications = JSON.parse(localStorage.getItem('notifications') || '[]');
-
-// --- Loader ---
-
-function showLoader(text = "Loading...") {
-    const overlay = document.getElementById('loaderOverlay');
-    const textEl = document.getElementById('loaderText');
-    if (overlay && textEl) {
-        textEl.innerText = text;
-        overlay.classList.add('active');
-    }
-}
-
-function hideLoader() {
-    const overlay = document.getElementById('loaderOverlay');
-    if (overlay) {
-        overlay.classList.remove('active');
-    }
-}
 
 // --- Notifications ---
 
@@ -128,6 +111,7 @@ async function initClerk() {
                 loadPhotos();
             } else {
                 currentUser = null;
+                currentUserAlbumNames = [];
                 document.getElementById('app-auth-container').classList.remove('hidden');
                 Clerk.mountSignIn(document.getElementById('clerk-sign-in'));
                 allPhotos = [];
@@ -147,20 +131,20 @@ async function getAuthHeaders() {
     };
 }
 
-async function logout() {
+async function logout(e) {
+    if (e && e.preventDefault) e.preventDefault();
     if (!confirm("Are you sure you want to logout?")) return;
     try {
         addNotification("Logging out...");
         if (typeof Clerk !== 'undefined' && Clerk.isLoaded()) {
             await Clerk.signOut();
-            window.location.reload();
+            // Clerk.addListener will handle showing the sign-in modal
         } else {
             console.error("Clerk not fully loaded, trying fallback logout...");
-            window.location.reload();
+            window.location.href = '/';
         }
     } catch (err) {
         console.error("Logout failed", err);
-        window.location.reload();
     }
 }
 
@@ -235,6 +219,8 @@ window.onload = async () => {
             if (e.target === albumModal) closeAlbumModal();
         };
     }
+    const confirmAlbumBtn = document.getElementById('confirmAlbumBtn');
+    if (confirmAlbumBtn) confirmAlbumBtn.onclick = confirmCreateAlbum;
     
     const nav = document.querySelector('.sidebar-nav');
     if (nav) {
@@ -360,16 +346,17 @@ function closeSidebar() {
 
 async function loadAlbums() {
     try {
-        showLoader("Loading albums...");
         const response = await fetch('/api/albums', {
             headers: await getAuthHeaders()
         });
-        hideLoader();
         if (response.status === 401) {
-            document.getElementById('authOverlay').classList.remove('hidden');
+            const authEl = document.getElementById('app-auth-container');
+            if (authEl) authEl.classList.remove('hidden');
+            currentUserAlbumNames = [];
             return;
         }
         const albums = await response.json();
+        currentUserAlbumNames = (albums || []).map(a => (a.name || '').toLowerCase());
         const list = document.getElementById("albumsList");
         list.innerHTML = "";
         
@@ -393,68 +380,77 @@ async function loadAlbums() {
         }
     } catch (error) {
         console.error('Error loading albums:', error);
+        currentUserAlbumNames = [];
     }
 }
 
 function openAlbumModal() {
     const albumModal = document.getElementById("albumModal");
+    if (!albumModal) return;
     albumModal.style.display = "flex";
+    albumModal.classList.remove("hidden");
     setTimeout(() => albumModal.classList.add("active"), 10);
 }
 
 async function addNewAlbum() {
     const input = document.getElementById("newAlbumName");
-    const confirmBtn = document.getElementById("confirmAlbumBtn");
-    
+    if (!input) return;
     openAlbumModal();
     input.value = "";
     input.focus();
 
-    const handleCreate = async () => {
-        const name = input.value.trim();
-        if (!name) return;
-
-        // Check if album name already exists in local list
-        const existingAlbums = Array.from(document.querySelectorAll('.albums-list button span'))
-            .map(span => span.innerText.toLowerCase());
-        
-        if (existingAlbums.includes(name.toLowerCase())) {
-            alert("An album with this name already exists!");
-            return;
-        }
-        
-        try {
-            showLoader("Creating album...");
-            const response = await fetch('/api/albums', {
-                method: 'POST',
-                headers: await getAuthHeaders(),
-                body: JSON.stringify({ name })
-            });
-            hideLoader();
-            const data = await response.json();
-            if (response.ok) {
-                await loadAlbums();
-                closeAlbumModal();
-            } else {
-                alert(data.error || "Failed to create album.");
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
-    // Remove any previous listeners
-    const newConfirmBtn = confirmBtn.cloneNode(true);
-    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-    newConfirmBtn.onclick = handleCreate;
-
-    // Handle Enter key
-    input.onkeydown = (e) => {
+    // Handle Enter key for this session
+    const keyHandler = (e) => {
         if (e.key === "Enter") {
             e.preventDefault();
-            handleCreate();
+            document.getElementById("confirmAlbumBtn").click();
         }
     };
+    input.onkeydown = keyHandler;
+}
+
+async function confirmCreateAlbum() {
+    const input = document.getElementById("newAlbumName");
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) {
+        alert("Please enter an album name.");
+        input.focus();
+        return;
+    }
+
+    if (currentUserAlbumNames.includes(name.toLowerCase())) {
+        alert("An album with this name already exists!");
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/albums', {
+            method: 'POST',
+            headers: await getAuthHeaders(),
+            body: JSON.stringify({ name })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+            await loadAlbums();
+            closeAlbumModal();
+        } else if (response.status === 401 || response.status === 403) {
+            closeAlbumModal();
+            const authEl = document.getElementById('app-auth-container');
+            if (authEl) authEl.classList.remove('hidden');
+        } else {
+            const msg = data.error ? `Failed to create album: ${data.error}` : "Failed to create album.";
+            alert(msg);
+        }
+    } catch (error) {
+        console.error(error);
+        const authEl = document.getElementById('app-auth-container');
+        if (authEl && !authEl.classList.contains('hidden')) {
+            alert("Could not create album. Check that the server is running.");
+        } else {
+            alert("Could not create album. Check that you're signed in and the server is running.");
+        }
+    }
 }
 
 function closeAlbumModal() {
@@ -471,13 +467,12 @@ function closeAlbumModal() {
 
 async function loadPhotos() {
     try {
-        showLoader("Loading photos...");
         const response = await fetch('/api/photos', {
             headers: await getAuthHeaders()
         });
-        hideLoader();
         if (response.status === 401) {
-            document.getElementById('authOverlay').classList.remove('hidden');
+            const authEl = document.getElementById('app-auth-container');
+            if (authEl) authEl.classList.remove('hidden');
             return;
         }
         allPhotos = await response.json();
@@ -680,15 +675,12 @@ async function toggleTrashBin() {
 
     if (isTrashOpen) {
         try {
-            showLoader("Opening trash...");
             const response = await fetch('/api/trash', {
                 headers: await getAuthHeaders()
             });
-            hideLoader();
             allPhotos = await response.json();
             renderWall();
         } catch (error) { 
-            hideLoader();
             console.error(error); 
         }
     } else {
@@ -702,14 +694,11 @@ upload.addEventListener("change", async function(){
     let files = Array.from(this.files);
     if(files.length === 0) return;
 
-    showLoader(`Processing ${files.length} photos...`);
-
     // Use current album as category, default to 'Friends'
     let category = (currentFilter === 'all' || currentFilter === 'favorites') ? 'Friends' : currentFilter;
 
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        showLoader(`Uploading ${i + 1}/${files.length}: ${file.name}`);
         try {
             const photoData = await compressImage(file, 1280, 0.8);
 
@@ -733,7 +722,6 @@ upload.addEventListener("change", async function(){
         }
     }
     this.value = ""; 
-    hideLoader();
     loadPhotos();
 });
 
@@ -757,12 +745,10 @@ if (uploadArea) {
         const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
         if (files.length === 0) return;
         
-        showLoader(`Processing ${files.length} photos...`);
         let category = (currentFilter === 'all' || currentFilter === 'favorites') ? 'Friends' : currentFilter;
         
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            showLoader(`Uploading ${i + 1}/${files.length}: ${file.name}`);
             try {
                 const photoData = await compressImage(file, 1280, 0.8);
                 await fetch('/api/photos', {
@@ -784,7 +770,6 @@ if (uploadArea) {
                 addNotification(`Failed to upload ${file.name}`);
             }
         }
-        hideLoader();
         loadPhotos();
     });
 }

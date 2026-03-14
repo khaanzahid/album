@@ -11,10 +11,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
 
-// Supabase Setup
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+// Serve static files first
+app.use(express.static(path.join(__dirname)));
 
 // Middleware
 app.use(cors({
